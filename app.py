@@ -82,7 +82,7 @@ class SpatialSEIR_CA:
         mask_eff: float     = 0.0,
         contact_radius: int = 1,
         n_initial: int      = 2,
-        : int           = None,
+        seed: int           = None,
     ):
         self.G_ROW          = G_ROWS
         self.G_COL          = G_COLS
