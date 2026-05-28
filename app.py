@@ -333,6 +333,7 @@ if "models" not in st.session_state or run_btn:
 models = st.session_state.models
 m0     = models[0]
 R0_val = m0.R0()
+Reff_val = round(R0_val * (1 - vacc_rate_f), 2)
 
 ar_vals   = [m.df["attack_rate"].iloc[-1] for m in models]
 peak_vals = [m.df["I"].max() for m in models]
@@ -342,34 +343,34 @@ peak_days = [m.df["I"].idxmax() for m in models]
 # ════════════════════════════════════════════════════════════════
 # KPI METRICS
 # ════════════════════════════════════════════════════════════════
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric(
     "R₀ CA-Model", f"{R0_val:.2f}",
-    "⚠️ Wabah" if R0_val > 1 else "✅ Aman",
-    delta_color="inverse" if R0_val > 1 else "normal",
     help=(
-        "R₀ = β_eff × k̄ / γ  (definisi per-tetangga CA).\n\n"
+        "R₀ = β_eff × k̄ / γ (definisi per-tetangga CA).\n\n"
         "Nilai ini lebih tinggi dari R₀ populasi WHO (1.2–2.0) karena β "
-        "di sini adalah probabilitas penularan per tetangga per hari, "
-        "bukan per seluruh populasi. Di ruang kelas tertutup dengan banyak "
-        "tetangga aktif, efek kontak berlipat — yang justru realistis "
-        "untuk setting indoor padat seperti kelas SGLC."
+        "di sini adalah probabilitas penularan per tetangga per hari."
     ),
 )
-c2.metric("Attack Rate (Median)", f"{np.median(ar_vals):.1f}%",
+c2.metric(
+    "R_eff (dengan vaksinasi)", f"{Reff_val:.2f}",
+    "⚠️ Wabah" if Reff_val > 1 else "✅ Terkendali",
+    delta_color="inverse" if Reff_val > 1 else "normal",
+    help="R_eff = R₀ × (1 - v). Nilai < 1 berarti wabah padam.",
+)
+c3.metric("Attack Rate (Median)", f"{np.median(ar_vals):.1f}%",
           f"dari {N_SEATS} mahasiswa")
-c3.metric("Puncak Infeksi (Median)", f"{np.median(peak_vals):.0f} orang")
-c4.metric("Hari Puncak (Median)", f"Hari ke-{np.median(peak_days):.0f}")
+c4.metric("Puncak Infeksi (Median)", f"{np.median(peak_vals):.0f} orang")
+c5.metric("Hari Puncak (Median)", f"Hari ke-{np.median(peak_days):.0f}")
 
-if R0_val < 1:
-    st.success(f"R₀ = {R0_val:.2f} < 1 → Wabah akan padam dengan sendirinya.")
-elif R0_val < 2:
-    st.warning(f"R₀ = {R0_val:.2f} → Wabah menyebar, masih bisa dikendalikan.")
+if Reff_val < 1:
+    st.success(f"R_eff = {Reff_val:.2f} < 1 → Wabah akan padam dengan sendirinya.")
+elif Reff_val < 2:
+    st.warning(f"R_eff = {Reff_val:.2f} → Wabah menyebar, masih bisa dikendalikan.")
 else:
     st.error(
-        f"R₀ = {R0_val:.2f} (definisi CA per-tetangga) → Wabah menyebar cepat di kelas ini. "
-        "Nilai lebih tinggi dari R₀ flu populasi umum WHO (1.2–2.0) karena model "
-        "merepresentasikan ruang tertutup — lihat tooltip ℹ️ untuk penjelasan."
+        f"R_eff = {Reff_val:.2f} → Wabah menyebar cepat! "
+        f"(R₀ CA = {R0_val:.2f}, dikurangi efek vaksinasi {vacc_rate}%)"
     )
 
 st.divider()
@@ -601,21 +602,27 @@ with tab4:
         sweep_vals = [1, 2, 3]
         pkey       = "contact_radius"
 
-    N_SWEEP = 20
-    with st.spinner(f"Menghitung sensitivitas ({N_SWEEP} run per nilai)..."):
-        medians, q25s, q75s = [], [], []
-        for v in sweep_vals:
-            p2   = {**base_p, pkey: v}
-            runs = [SpatialSEIR_CA(**p2, seed=i * 137 + 42) for i in range(N_SWEEP)]
-            for m2 in runs:
-                m2.run(sim_days)
-            if "Attack" in metric_s:
-                values = [m2.df["attack_rate"].iloc[-1] for m2 in runs]
-            else:
-                values = [m2.df["I"].max() for m2 in runs]
-            medians.append(np.median(values))
-            q25s.append(np.percentile(values, 25))
-            q75s.append(np.percentile(values, 75))
+    N_SWEEP   = 20
+    sweep_key = f"sens_{param_s}_{metric_s}_{beta}_{gamma}_{sigma}_{mobility}_{vacc_rate}_{mask_eff}_{contact_radius}"
+
+    if sweep_key not in st.session_state:
+        with st.spinner(f"Menghitung sensitivitas ({N_SWEEP} run per nilai)..."):
+            medians, q25s, q75s = [], [], []
+            for v in sweep_vals:
+                p2   = {**base_p, pkey: v}
+                runs = [SpatialSEIR_CA(**p2, seed=i * 137 + 42) for i in range(N_SWEEP)]
+                for m2 in runs:
+                    m2.run(sim_days)
+                if "Attack" in metric_s:
+                    values = [m2.df["attack_rate"].iloc[-1] for m2 in runs]
+                else:
+                    values = [m2.df["I"].max() for m2 in runs]
+                medians.append(np.median(values))
+                q25s.append(np.percentile(values, 25))
+                q75s.append(np.percentile(values, 75))
+            st.session_state[sweep_key] = (medians, q25s, q75s)
+    else:
+        medians, q25s, q75s = st.session_state[sweep_key]
 
     fig_sw = go.Figure()
     fig_sw.add_trace(go.Scatter(
