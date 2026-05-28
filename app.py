@@ -1,3 +1,4 @@
+from time import time
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -81,7 +82,7 @@ class SpatialSEIR_CA:
         mask_eff: float     = 0.0,
         contact_radius: int = 1,
         n_initial: int      = 2,
-        seed: int           = 42,
+        seed: int           = int(time.time()),
     ):
         self.G_ROW          = G_ROWS
         self.G_COL          = G_COLS
@@ -324,7 +325,7 @@ if "models" not in st.session_state or run_btn:
     with st.spinner("Menjalankan simulasi ensemble..."):
         models = []
         for i in range(n_ensemble):
-            m = SpatialSEIR_CA(**params, seed=i * 137 + 42)
+            m = SpatialSEIR_CA(**params, seed=i * 137 + base_seed)
             m.run(days=sim_days)
             models.append(m)
     st.session_state.models = models
