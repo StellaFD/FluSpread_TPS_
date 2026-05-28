@@ -82,7 +82,7 @@ class SpatialSEIR_CA:
         mask_eff: float     = 0.0,
         contact_radius: int = 1,
         n_initial: int      = 2,
-        seed: int           = None,
+        : int           = None,
     ):
         self.G_ROW          = G_ROWS
         self.G_COL          = G_COLS
@@ -323,7 +323,7 @@ params = dict(
 
 if "models" not in st.session_state or run_btn:
     with st.spinner("Menjalankan simulasi ensemble..."):
-        base_seed = int(time.time())
+        base_seed = int(time())
         models = []
         for i in range(n_ensemble):
             m = SpatialSEIR_CA(**params, seed=i * 137 + base_seed)
